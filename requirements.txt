@@ -1,0 +1,13 @@
+streamlit
+streamlit_cropper
+opencv-python-headless
+tensorflow>=2.16.0
+pyperclip
+vietocr
+torch==2.2.0+cpu
+torchvision==0.15.1+cpu
+einops
+gdown
+tqdm
+pillow
+--find-links https://download.pytorch.org/whl/torch_stable.html

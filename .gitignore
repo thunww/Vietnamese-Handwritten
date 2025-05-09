@@ -3,4 +3,5 @@
 *.jpeg
 *.gif
 
-env/
+venv/
+temp/
