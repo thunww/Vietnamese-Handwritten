@@ -4,7 +4,7 @@ warnings.filterwarnings('ignore', category=DeprecationWarning)
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'  # Tắt oneDNN
 import numpy as np
 import tensorflow as tf
-tf.config.threading.set_intra_op_parallelism_threads(8)  # Tăng thread CPU
+tf.config.threading.set_intra_op_parallelism_threads(8)
 tf.config.threading.set_inter_op_parallelism_threads(8)
 from tensorflow.keras import backend as K
 from tensorflow.keras.models import Model
@@ -12,22 +12,28 @@ from tensorflow.keras.layers import Input, Lambda
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
-# from tensorflow.keras.mixed_precision import set_global_policy  # Tắt mixed_float16
 from module.crnn_model import build_model
 from preprocess import load_data
 import logging
 from collections import Counter
 import json
+import multiprocessing
 
 # Thiết lập logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 logger.info(f"TensorFlow version: {tf.__version__}")
+logger.info(f"GPU có sẵn: {tf.config.list_physical_devices('GPU')}")
+logger.info(f"Số lõi CPU: {multiprocessing.cpu_count()}")
 
 # Hàm mất mát CTC
 def ctc_lambda_func(args):
     y_pred, labels, input_length, label_length = args
     return K.ctc_batch_cost(labels, y_pred, input_length, label_length)
+
+# Hàm mất mát CTC cho compile
+def ctc_loss(y_true, y_pred):
+    return y_pred
 
 # Hàm làm sạch nhãn
 def clean_label(label, valid_chars):
@@ -36,9 +42,15 @@ def clean_label(label, valid_chars):
 # Kiểm tra sự tồn tại của thư mục và file
 def check_data_paths(data_dir, label_file):
     if not os.path.exists(data_dir):
-        raise FileNotFoundError(f"Thư mục {data_dir} không tồn tại. Vui lòng tạo thư mục và đặt ảnh vào đó.")
+        raise FileNotFoundError(f"Thư mục {data_dir} không tồn tại.")
     if not os.path.exists(label_file):
-        raise FileNotFoundError(f"File {label_file} không tồn tại. Vui lòng tạo file với định dạng 'tên_ảnh:văn_bản'.")
+        raise FileNotFoundError(f"File {label_file} không tồn tại.")
+
+# Xóa mô hình cũ để tránh xung đột
+for model_file in ['D:/Vietnamese-handwritten/data/final_model.keras', 'D:/Vietnamese-handwritten/data/best_model.keras']:
+    if os.path.exists(model_file):
+        os.remove(model_file)
+        logger.info(f"Đã xóa mô hình cũ: {model_file}")
 
 # Tải dữ liệu
 logger.info("Đang tải dữ liệu huấn luyện và kiểm tra...")
@@ -80,7 +92,7 @@ characters = (
     'àáâãèéêìíòóôõùúýăđĩũơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ'
     'ÀÁÂÃÈÉÊÌÍÒÓÔÕÙÚÝĂĐĨŨƠƯẠẢẤẦẨẪẬẮẰẲẴẶẸẺẼẾỀỂỄỆỈỊỌỎỐỒỔỖỘỚỜỞỠỢỤỦỨỪỬỮỰỲỴỶỸ'
     'Ơ'
-    ' .,:!?()"-/[]\'%;@#$&*+={}|\<>~^_\t\n'
+    ' .,:!?()"-/[]\'%;@#$&*+={}|\\<>~^_\t\n'
 )
 char_to_idx = {char: idx + 1 for idx, char in enumerate(characters)}
 logger.info(f"Số ký tự trong characters: {len(characters)}")
@@ -116,11 +128,6 @@ logger.info("Tạo mô hình CRNN...")
 model = build_model(num_classes=len(characters) + 1)
 logger.info(f"Model output shape: {model.output_shape}")
 
-# Tải mô hình từ checkpoint nếu tồn tại
-if os.path.exists('D:/Vietnamese-handwritten/data/best_model.keras'):
-    logger.info("Tải mô hình từ checkpoint...")
-    model.load_weights('D:/Vietnamese-handwritten/data/best_model.keras')
-
 # Chuẩn bị đầu vào
 train_input_length = np.ones((len(train_images), 1), dtype=np.int32) * int(model.output_shape[1])
 test_input_length = np.ones((len(test_images), 1), dtype=np.int32) * int(model.output_shape[1])
@@ -147,8 +154,14 @@ loss_out = Lambda(ctc_lambda_func, output_shape=(1,), name='ctc')(
 )
 
 # Biên dịch mô hình
-training_model = Model(inputs=[model.input, labels, input_length, label_length], outputs=loss_out)
-training_model.compile(optimizer=Adam(learning_rate=1e-4), loss={'ctc': lambda y_true, y_pred: y_pred})
+training_model = Model(
+    inputs=[model.input, labels, input_length, label_length],
+    outputs=loss_out
+)
+training_model.compile(
+    optimizer=Adam(learning_rate=1e-4),
+    loss={'ctc': ctc_loss}  # Sử dụng hàm ctc_loss thay vì lambda
+)
 
 # Đảm bảo thư mục đầu ra
 os.makedirs('D:/Vietnamese-handwritten/data', exist_ok=True)
@@ -186,7 +199,7 @@ def batch_generator(images, labels_idx, input_length, label_length, batch_size, 
             yield (inputs, outputs)
 
 # Huấn luyện
-batch_size = 8  # Giảm batch_size
+batch_size = 4
 train_generator = batch_generator(train_images, train_labels_idx, train_input_length, train_label_length, batch_size, augment=True)
 validation_generator = batch_generator(test_images, test_labels_idx, test_input_length, test_label_length, batch_size, augment=False)
 logger.info("Bắt đầu huấn luyện mô hình...")
@@ -197,7 +210,7 @@ training_model.fit(
     validation_steps=(len(test_images) + batch_size - 1) // batch_size,
     epochs=20,
     callbacks=callbacks,
-    verbose=1  # Hiển thị tiến trình
+    verbose=1
 )
 
 # Lưu mô hình
