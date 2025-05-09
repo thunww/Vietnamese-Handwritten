@@ -3,5 +3,7 @@
 *.jpeg
 *.gif
 
+*.keras
+
 venv/
 temp/
