@@ -195,7 +195,7 @@ def batch_generator(images, labels_idx, input_length, label_length, batch_size, 
             yield (inputs, outputs)
 
 # Huấn luyện
-batch_size = 64
+batch_size = 32
 train_generator = batch_generator(train_images, train_labels_idx, train_input_length, train_label_length, batch_size, augment=True)
 validation_generator = batch_generator(test_images, test_labels_idx, test_input_length, test_label_length, batch_size, augment=False)
 logger.info("Bắt đầu huấn luyện mô hình...")
