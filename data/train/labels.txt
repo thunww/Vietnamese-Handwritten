@@ -1,10 +1,10 @@
-0.jpg:An Giang
-1.jpg:Tỉnh An Giang
-10.jpg:Mỹ Long
-100.jpg:KHÁNH AN, AN PHÚ, AN GIANG
-1000.jpg:Hà Mòn
-10000.jpg:HOA SƠN, ỨNG HÒA, HÀ NỘI
-100000.jpg:THÁNG 3 28, 1982
-100001.jpg:17 JANUARY, 2016
-100002.jpg:12, Jun 1971
-100003.jpg:7 tháng 4, 1988
+0.jpg	An Giang
+1.jpg	Tỉnh An Giang
+10.jpg	Mỹ Long
+100.jpg KHÁNH AN, AN PHÚ, AN GIANG
+1000.jpg	Hà Mòn
+10000.jpg	HOA SƠN, ỨNG HÒA, HÀ NỘI
+100000.jpg	THÁNG 3 28, 1982
+100001.jpg	17 JANUARY, 2016
+100002.jpg	12, Jun 1971
+100003.jpg  7 tháng 4, 1988

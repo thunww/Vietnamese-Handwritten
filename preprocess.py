@@ -1,64 +1,66 @@
+import os
 import cv2
 import numpy as np
-import os
-import logging
+from PIL import Image
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
-def preprocess_image(image_path, target_size=(118, 2167)):
-    if not os.path.exists(image_path):
-        logger.warning(f"Image {image_path} not found.")
-        return None
-
-    img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+# Hàm xử lý ảnh
+def preprocess_image(image_path, method='adaptive'):
+    img = cv2.imread(image_path)
     if img is None:
-        logger.warning(f"Cannot read image {image_path}")
-        return None
+        raise ValueError(f"Không thể đọc ảnh từ {image_path}")
+    
+    # Chuyển ảnh sang grayscale
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    
+    # Làm mờ ảnh để giảm nhiễu
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    
+    # Chọn phương pháp thresholding
+    if method == 'simple':
+        _, thresh = cv2.threshold(blurred, 150, 255, cv2.THRESH_BINARY)
+    elif method == 'adaptive':
+        thresh = cv2.adaptiveThreshold(
+            blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+        )
+    elif method == 'otsu':
+        _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    else:
+        _, thresh = cv2.threshold(blurred, 150, 255, cv2.THRESH_BINARY)
+    
+    # Chuyển đổi mảng NumPy sang Image (PIL) nếu cần
+    return Image.fromarray(thresh)
 
-    original_h, original_w = img.shape
-    target_h, target_w = target_size
 
-    # Tính tỷ lệ scale (giữ nguyên tỷ lệ gốc)
-    scale = min(target_w / original_w, target_h / original_h)
-    new_w = int(original_w * scale)
-    new_h = int(original_h * scale)
-
-    # Resize theo tỷ lệ
-    img = cv2.resize(img, (new_w, new_h))
-
-    # Padding ảnh vào khung trắng (255) đúng size
-    padded_img = np.ones((target_h, target_w), dtype=np.uint8) * 255
-    pad_top = (target_h - new_h) // 2
-    pad_left = (target_w - new_w) // 2
-    padded_img[pad_top:pad_top + new_h, pad_left:pad_left + new_w] = img
-
-    # Normalize và thêm chiều channel
-    padded_img = padded_img.astype('float32') / 255.0
-    padded_img = np.expand_dims(padded_img, axis=-1)
-    return padded_img
-
-def load_data(data_dir, label_file, target_size=(118, 2167)):
+def load_data(data_dir, label_file, image_size=(118, 2167)):
     images = []
     labels = []
-    skipped = 0
+    
+    # Đọc nhãn từ file labels.txt
+    label_dict = {}
     with open(label_file, 'r', encoding='utf-8') as f:
         for line in f:
-            if ':' not in line:
-                logger.warning(f"Invalid line in {label_file}: {line.strip()}")
-                skipped += 1
-                continue
-            img_name, text = line.strip().split(':', 1)
-            img_path = os.path.join(data_dir, img_name)
-            img = preprocess_image(img_path, target_size)
+            parts = line.strip().split('\t')  # Giả sử labels.txt có định dạng: filename.jpg<tab>nhãn
+            if len(parts) == 2:
+                label_dict[parts[0]] = parts[1]
+    
+    # Kiểm tra và chắc chắn image_size là (height, width)
+    print("Image size:", image_size)  # Debugging: In ra kích thước hình ảnh
+    
+    # Lặp qua các file ảnh trong thư mục
+    for filename in os.listdir(data_dir):
+        if filename.endswith('.png') or filename.endswith('.jpg'):
+            img_path = os.path.join(data_dir, filename)
+            img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+            
             if img is not None:
+                # Thay đổi kích thước ảnh về (height, width)
+                img = cv2.resize(img, (image_size[1], image_size[0]))  # (width, height)
+                img = img.reshape((image_size[0], image_size[1], 1))  # (height, width, 1)
+                
+                # Lấy nhãn từ label_dict
+                label = label_dict.get(filename, filename.split('.')[0])  # Fallback nếu không tìm thấy nhãn
                 images.append(img)
-                labels.append(text)
-            else:
-                skipped += 1
-    logger.info(f"Loaded {len(images)} images, skipped {skipped} entries from {label_file}")
-    return np.array(images), labels
-
-if __name__ == "__main__":
-    train_images, train_labels = load_data('data/train', 'data/train/labels.txt')
-    logger.info(f"Loaded {len(train_images)} images and {len(train_labels)} labels")
+                labels.append(label)
+    
+    images = np.array(images)
+    return images, labels

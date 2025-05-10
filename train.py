@@ -1,11 +1,7 @@
 import os
 import warnings
-warnings.filterwarnings('ignore', category=DeprecationWarning)
-os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'  # Tắt oneDNN
 import numpy as np
 import tensorflow as tf
-tf.config.threading.set_intra_op_parallelism_threads(8)
-tf.config.threading.set_inter_op_parallelism_threads(8)
 from tensorflow.keras import backend as K
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input, Lambda
@@ -25,6 +21,15 @@ logger = logging.getLogger(__name__)
 logger.info(f"TensorFlow version: {tf.__version__}")
 logger.info(f"GPU có sẵn: {tf.config.list_physical_devices('GPU')}")
 logger.info(f"Số lõi CPU: {multiprocessing.cpu_count()}")
+
+# Tắt warning DeprecationWarning
+warnings.filterwarnings('ignore', category=DeprecationWarning)
+# Tắt OneDNN optimization
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+
+# Thiết lập số lượng luồng cho TensorFlow
+tf.config.threading.set_intra_op_parallelism_threads(8)
+tf.config.threading.set_inter_op_parallelism_threads(8)
 
 # Hàm mất mát CTC
 def ctc_lambda_func(args):
@@ -70,7 +75,7 @@ expected_shape = (118, 2167, 1)
 if train_images.shape[1:] != expected_shape:
     raise ValueError(f"Kích thước train_images không khớp: {train_images.shape[1:]} != {expected_shape}")
 if test_images.shape[1:] != expected_shape:
-    raise ValueError(f"Kích thước test_images không khớp: {test_images.shape[1:]} != {expected_shape}")
+    raise ValueError(f"Kích thước test_images không khớp: {train_images.shape[1:]} != {expected_shape}")
 
 # Kiểm tra dữ liệu
 logger.info(f"Số mẫu huấn luyện: {len(train_images)}")
@@ -86,29 +91,20 @@ test_images = test_images.astype('float32') / 255.0
 logger.info(f"train_images shape: {train_images.shape}")
 logger.info(f"test_images shape: {test_images.shape}")
 
-# Bộ từ vựng
-characters = (
-    '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
-    'àáâãèéêìíòóôõùúýăđĩũơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ'
-    'ÀÁÂÃÈÉÊÌÍÒÓÔÕÙÚÝĂĐĨŨƠƯẠẢẤẦẨẪẬẮẰẲẴẶẸẺẼẾỀỂỄỆỈỊỌỎỐỒỔỖỘỚỜỞỠỢỤỦỨỪỬỮỰỲỴỶỸ'
-    'Ơ'
-    ' .,:!?()"-/[]\'%;@#$&*+={}|\\<>~^_\t\n'
-)
-char_to_idx = {char: idx + 1 for idx, char in enumerate(characters)}
-logger.info(f"Số ký tự trong characters: {len(characters)}")
+# Tải char_to_idx_simplified.json
+with open('D:/Vietnamese-handwritten/data/char_to_idx_simplified.json', 'r', encoding='utf-8') as f:
+    char_to_idx = json.load(f)
+characters = list(char_to_idx.keys())
+logger.info(f"Số ký tự trong char_to_idx_simplified.json: {len(characters)}")
+valid_chars = set(char_to_idx.keys())  # Định nghĩa valid_chars trước
 missing_chars = set(char_counts.keys()) - set(characters)
 logger.info(f"Ký tự trong nhãn nhưng không có trong characters: {missing_chars}")
 missing_in_data = set(characters) - set(char_counts.keys())
 logger.info(f"Ký tự trong characters nhưng không có trong nhãn: {missing_in_data}")
 
-# Lưu char_to_idx vào file JSON
-with open('D:/Vietnamese-handwritten/data/char_to_idx.json', 'w', encoding='utf-8') as f:
-    json.dump(char_to_idx, f, ensure_ascii=False)
-logger.info("Đã lưu char_to_idx vào D:/Vietnamese-handwritten/data/char_to_idx.json")
-
-# Làm sạch và chuẩn hóa nhãn
-train_labels = [clean_label(label.lower(), characters) for label in train_labels]
-test_labels = [clean_label(label.lower(), characters) for label in test_labels]
+# Làm sạch và chuẩn hóa nhãn (giữ nguyên in hoa/thường)
+train_labels = [clean_label(label, valid_chars) for label in train_labels]
+test_labels = [clean_label(label, valid_chars) for label in test_labels]
 
 # Kiểm tra ký tự
 for label in train_labels + test_labels:
@@ -125,7 +121,7 @@ test_labels_idx = np.array([[char_to_idx[c] for c in label] + [0] * (max_label_l
 
 # Tạo mô hình
 logger.info("Tạo mô hình CRNN...")
-model = build_model(num_classes=len(characters) + 1)
+model = build_model(num_classes=len(char_to_idx) + 1)
 logger.info(f"Model output shape: {model.output_shape}")
 
 # Chuẩn bị đầu vào
@@ -160,7 +156,7 @@ training_model = Model(
 )
 training_model.compile(
     optimizer=Adam(learning_rate=1e-4),
-    loss={'ctc': ctc_loss}  # Sử dụng hàm ctc_loss thay vì lambda
+    loss={'ctc': ctc_loss}
 )
 
 # Đảm bảo thư mục đầu ra
@@ -189,7 +185,7 @@ def batch_generator(images, labels_idx, input_length, label_length, batch_size, 
             batch_input_length = input_length[batch_indices]
             batch_label_length = label_length[batch_indices]
             inputs = {
-                'crnn_input': batch_images,
+                'input_layer': batch_images,
                 'the_labels': batch_labels,
                 'input_length': batch_input_length,
                 'label_length': batch_label_length
@@ -199,7 +195,7 @@ def batch_generator(images, labels_idx, input_length, label_length, batch_size, 
             yield (inputs, outputs)
 
 # Huấn luyện
-batch_size = 4
+batch_size = 64
 train_generator = batch_generator(train_images, train_labels_idx, train_input_length, train_label_length, batch_size, augment=True)
 validation_generator = batch_generator(test_images, test_labels_idx, test_input_length, test_label_length, batch_size, augment=False)
 logger.info("Bắt đầu huấn luyện mô hình...")
@@ -215,5 +211,5 @@ training_model.fit(
 
 # Lưu mô hình
 logger.info("Lưu mô hình cuối cùng...")
-model.save('D:/Vietnamese-handwritten/data/final_model.keras')
-logger.info("Đã lưu mô hình tại D:/Vietnamese-handwritten/data/final_model.keras")
+model.save('D:/Vietnamese-handwritten/data/new_model.keras')
+logger.info("Đã lưu mô hình tại D:/Vietnamese-handwritten/data/new_model.keras")

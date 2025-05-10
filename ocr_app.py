@@ -1,25 +1,108 @@
+# ocr_app.py
+import logging
+import json
 import os
 import cv2
 import numpy as np
 from PIL import Image
-import logging
 import tensorflow as tf
-from module.crnn_model import build_model
 from tensorflow.keras.backend import ctc_decode
-import json
+from module.crnn_model import build_model
+from module.vietocr_module import load_vietocr_model, recognize_text_vietocr
+from preprocess import preprocess_image
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 logger.info(f"TensorFlow version: {tf.__version__}")
 
-try:
-    from module.vietnamese_ocr import recognize_text
-    from module.vietocr_module import load_vietocr_model, recognize_text_vietocr
-except ImportError as e:
-    logger.error(f"Lỗi import module: {str(e)}")
-    raise ImportError("Vui lòng cài đặt VietOCR và cấu hình module đúng cách")
-
-from preprocess import preprocess_image
+def load_custom_model(custom_model_path, num_classes):
+    """
+    Tải mô hình tùy chỉnh với kiến trúc được định nghĩa chính xác như khi đào tạo.
+    
+    Args:
+        custom_model_path: Đường dẫn đến file mô hình đã lưu
+        num_classes: Số lượng lớp đầu ra
+        
+    Returns:
+        model: Mô hình đã tải trọng số
+    """
+    logger.info(f"Đang tải mô hình từ {custom_model_path}...")
+    if not os.path.exists(custom_model_path):
+        raise FileNotFoundError(f"Không tìm thấy mô hình tại {custom_model_path}")
+    
+    try:
+        # Thay vì sử dụng build_model từ module.crnn_model, định nghĩa lại kiến trúc
+        # để đảm bảo nó khớp chính xác với mô hình đã đào tạo
+        inputs = tf.keras.Input(shape=(118, 2167, 1))
+        x = tf.keras.layers.Conv2D(64, (3, 3), padding='same', activation='relu')(inputs)
+        x = tf.keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
+        x = tf.keras.layers.Conv2D(128, (3, 3), padding='same', activation='relu')(x)
+        x = tf.keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
+        x = tf.keras.layers.Reshape(target_shape=(-1, x.shape[-1]))(x)
+        
+        # Đảm bảo thông số LSTM chính xác
+        x = tf.keras.layers.Bidirectional(
+            tf.keras.layers.LSTM(256, return_sequences=True, 
+                                 kernel_initializer='he_normal', 
+                                 recurrent_initializer='orthogonal')
+        )(x)
+        
+        x = tf.keras.layers.Dense(num_classes, activation='softmax')(x)
+        model = tf.keras.Model(inputs, outputs=x)
+        
+        logger.info("Đã xây dựng mô hình với kiến trúc tương thích")
+        
+        # Tải trọng số
+        model.load_weights(custom_model_path)
+        logger.info("Đã tải trọng lượng mô hình thành công")
+        
+        return model
+    except Exception as e:
+        logger.error(f"Lỗi khi tải mô hình: {str(e)}")
+        # Thử phương pháp khác nếu phương pháp trên thất bại
+        try:
+            # Khởi tạo từng lớp với đúng kích thước
+            logger.info("Thử phương pháp khác để tải mô hình...")
+            # Reset default graph để tránh xung đột
+            tf.compat.v1.reset_default_graph()
+            
+            # Tạo mô hình mới với cùng kích thước trọng số
+            inputs = tf.keras.Input(shape=(118, 2167, 1))
+            x = tf.keras.layers.Conv2D(64, (3, 3), padding='same', activation='relu')(inputs)
+            x = tf.keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
+            x = tf.keras.layers.Conv2D(128, (3, 3), padding='same', activation='relu')(x)
+            x = tf.keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
+            
+            # Lấy kích thước sau pooling
+            _, height, width, channels = x.shape
+            x = tf.keras.layers.Reshape(target_shape=(height * width, channels))(x)
+            
+            # Sử dụng LSTM với kích thước đúng
+            x = tf.keras.layers.Bidirectional(
+                tf.keras.layers.LSTM(256, return_sequences=True)
+            )(x)
+            
+            x = tf.keras.layers.Dense(num_classes, activation='softmax')(x)
+            model = tf.keras.Model(inputs, outputs=x)
+            
+            # Thử tải bằng load_model thay vì load_weights
+            if custom_model_path.endswith('.keras'):
+                model_dir = os.path.dirname(custom_model_path)
+                model_name = os.path.basename(custom_model_path).replace('.keras', '')
+                model_path = os.path.join(model_dir, model_name)
+                if os.path.exists(model_path):
+                    model = tf.keras.models.load_model(model_path, compile=False)
+                else:
+                    # Thử tải trọng số một lần nữa
+                    model.load_weights(custom_model_path)
+            else:
+                model.load_weights(custom_model_path)
+                
+            logger.info("Đã tải mô hình thành công bằng phương pháp thay thế")
+            return model
+        except Exception as e2:
+            logger.error(f"Cả hai phương pháp đều thất bại: {str(e2)}")
+            raise e
 
 class OCR:
     def __init__(self, char_to_idx_path, custom_model_path=None):
@@ -30,11 +113,11 @@ class OCR:
         self.custom_model = None
         
         try:
-            logger.info("Đang tải model VietOCR...")
+            logger.info("Đang tải mô hình VietOCR...")
             self.vietocr_predictor = load_vietocr_model(use_gpu=False)
-            logger.info("Đã tải xong model VietOCR")
+            logger.info("Đã tải xong mô hình VietOCR")
         except Exception as e:
-            logger.warning(f"Không thể tải model VietOCR: {str(e)}")
+            logger.warning(f"Không thể tải mô hình VietOCR: {str(e)}")
         
         if custom_model_path:
             try:
@@ -49,7 +132,6 @@ class OCR:
         if img is None:
             raise ValueError(f"Không thể xử lý ảnh từ {image_path}")
         return np.expand_dims(img, axis=0)
-
     def recognize(self, image_path, use_vietocr=True, preprocess=True):
         if not os.path.exists(image_path):
             raise FileNotFoundError(f"Không tìm thấy file ảnh tại {image_path}")
@@ -78,7 +160,7 @@ class OCR:
         else:
             if self.custom_model is None or self.idx_to_char is None:
                 raise ValueError("Không có mô hình tự huấn luyện hoặc từ điển ký tự.")
-            logger.info("Sử dụng model tự train để nhận dạng...")
+            logger.info("Sử dụng mô hình tự train để nhận dạng...")
             
             img = self.preprocess_for_crnn(processed_image_path)
             y_pred = self.custom_model.predict(img)
@@ -92,41 +174,8 @@ class OCR:
             
             return prediction[0]
 
-def preprocess_image(image_path, method='adaptive'):
-    img = cv2.imread(image_path)
-    if img is None:
-        raise ValueError(f"Không thể đọc ảnh từ {image_path}")
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    if method == 'simple':
-        _, thresh = cv2.threshold(blurred, 150, 255, cv2.THRESH_BINARY)
-    elif method == 'adaptive':
-        thresh = cv2.adaptiveThreshold(
-            blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
-        )
-    elif method == 'otsu':
-        _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    else:
-        _, thresh = cv2.threshold(blurred, 150, 255, cv2.THRESH_BINARY)
-    return Image.fromarray(thresh)
-
-def load_custom_model(custom_model_path, num_classes):
-    logger.info(f"Đang tải mô hình từ {custom_model_path}...")
-    if not os.path.exists(custom_model_path):
-        raise FileNotFoundError(f"Không tìm thấy mô hình tại {custom_model_path}")
-    try:
-        model = build_model(num_classes)
-        logger.info("Đã xây dựng mô hình")
-        model.load_weights(custom_model_path)
-        logger.info("Đã tải trọng lượng mô hình")
-        return model
-    except Exception as e:
-        logger.error(f"Lỗi khi tải mô hình: {str(e)}")
-        raise e
-
-
 def main():
-    char_to_idx_path = "D:/Vietnamese-handwritten/data/char_to_idx.json"
+    char_to_idx_path = "D:/Vietnamese-handwritten/data/char_to_idx_simplified.json"
     custom_model_path = "D:/Vietnamese-handwritten/data/final_model.keras"
     ocr = OCR(char_to_idx_path, custom_model_path=custom_model_path)
     image_path = input("Nhập đường dẫn đến file ảnh: ")
