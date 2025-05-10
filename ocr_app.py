@@ -5,7 +5,6 @@ from PIL import Image
 import logging
 import tensorflow as tf
 from module.crnn_model import build_model
-from tensorflow.keras.models import load_model
 from tensorflow.keras.backend import ctc_decode
 import json
 
@@ -37,11 +36,10 @@ class OCR:
         except Exception as e:
             logger.warning(f"Không thể tải model VietOCR: {str(e)}")
         
-        # Tải mô hình tự huấn luyện nếu có
         if custom_model_path:
             try:
                 logger.info(f"Đang tải mô hình tự huấn luyện từ {custom_model_path}...")
-                self.custom_model = load_custom_model(custom_model_path)
+                self.custom_model = load_custom_model(custom_model_path, len(self.char_to_idx) + 1)
                 logger.info("Đã tải mô hình tự huấn luyện")
             except Exception as e:
                 logger.warning(f"Không thể tải mô hình tự huấn luyện: {str(e)}")
@@ -94,11 +92,12 @@ class OCR:
             
             return prediction[0]
 
-def preprocess_image(image_path, target_size=(118, 2167), method='adaptive'):
-    img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+def preprocess_image(image_path, method='adaptive'):
+    img = cv2.imread(image_path)
     if img is None:
         raise ValueError(f"Không thể đọc ảnh từ {image_path}")
-    blurred = cv2.GaussianBlur(img, (5, 5), 0)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
     if method == 'simple':
         _, thresh = cv2.threshold(blurred, 150, 255, cv2.THRESH_BINARY)
     elif method == 'adaptive':
@@ -109,22 +108,34 @@ def preprocess_image(image_path, target_size=(118, 2167), method='adaptive'):
         _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     else:
         _, thresh = cv2.threshold(blurred, 150, 255, cv2.THRESH_BINARY)
-    # Resize ảnh về kích thước mục tiêu
-    resized = cv2.resize(thresh, target_size[::-1], interpolation=cv2.INTER_AREA)
-    # Chuẩn hóa về [0, 1]
-    normalized = resized.astype(np.float32) / 255.0
-    # Thêm chiều kênh
-    normalized = np.expand_dims(normalized, axis=-1)
-    return normalized
+    return Image.fromarray(thresh)
 
-def load_custom_model(custom_model_path):
+def load_custom_model(custom_model_path, num_classes):
     logger.info(f"Đang tải mô hình từ {custom_model_path}...")
     if not os.path.exists(custom_model_path):
         raise FileNotFoundError(f"Không tìm thấy mô hình tại {custom_model_path}")
     try:
-        model = load_model(custom_model_path, compile=False)
-        logger.info("Đã tải mô hình")
+        model = build_model(num_classes)
+        logger.info("Đã xây dựng mô hình")
+        model.load_weights(custom_model_path)
+        logger.info("Đã tải trọng lượng mô hình")
         return model
     except Exception as e:
         logger.error(f"Lỗi khi tải mô hình: {str(e)}")
         raise e
+
+
+def main():
+    char_to_idx_path = "D:/Vietnamese-handwritten/data/char_to_idx.json"
+    custom_model_path = "D:/Vietnamese-handwritten/data/final_model.keras"
+    ocr = OCR(char_to_idx_path, custom_model_path=custom_model_path)
+    image_path = input("Nhập đường dẫn đến file ảnh: ")
+    use_vietocr = input("Sử dụng VietOCR? (y/n): ").lower() == 'y'
+    try:
+        text = ocr.recognize(image_path, use_vietocr)
+        print(f"Văn bản được nhận dạng: {text}")
+    except Exception as e:
+        print(f"Lỗi: {str(e)}")
+
+if __name__ == "__main__":
+    main()
