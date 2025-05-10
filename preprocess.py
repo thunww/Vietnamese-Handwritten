@@ -3,18 +3,26 @@ import cv2
 import numpy as np
 from PIL import Image
 
-# Hàm xử lý ảnh
-def preprocess_image(image_path, method='adaptive'):
-    img = cv2.imread(image_path)
+def preprocess_image(image_path, target_size=(118, 2167), method='adaptive'):
+    """
+    Xử lý ảnh đầu vào cho mô hình CRNN.
+
+    Args:
+        image_path (str): Đường dẫn đến file ảnh.
+        target_size (tuple): Kích thước mục tiêu (chiều cao, chiều rộng).
+        method (str): Phương pháp thresholding ('simple', 'adaptive', 'otsu').
+
+    Returns:
+        numpy.ndarray: Ảnh đã xử lý với shape (chiều cao, chiều rộng, 1).
+    """
+    # Đọc ảnh dưới dạng grayscale
+    img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
     if img is None:
         raise ValueError(f"Không thể đọc ảnh từ {image_path}")
-    
-    # Chuyển ảnh sang grayscale
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    
+
     # Làm mờ ảnh để giảm nhiễu
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    
+    blurred = cv2.GaussianBlur(img, (5, 5), 0)
+
     # Chọn phương pháp thresholding
     if method == 'simple':
         _, thresh = cv2.threshold(blurred, 150, 255, cv2.THRESH_BINARY)
@@ -26,10 +34,17 @@ def preprocess_image(image_path, method='adaptive'):
         _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     else:
         _, thresh = cv2.threshold(blurred, 150, 255, cv2.THRESH_BINARY)
-    
-    # Chuyển đổi mảng NumPy sang Image (PIL) nếu cần
-    return Image.fromarray(thresh)
 
+    # Resize ảnh về kích thước mục tiêu (chiều rộng, chiều cao)
+    thresh = cv2.resize(thresh, (target_size[1], target_size[0]))
+
+    # Thêm chiều kênh (1) để có shape (chiều cao, chiều rộng, 1)
+    thresh = thresh[..., np.newaxis]
+
+    # Chuẩn hóa giá trị pixel về [0, 1] (tùy chọn, nếu mô hình yêu cầu)
+    thresh = thresh / 255.0
+
+    return thresh
 
 def load_data(data_dir, label_file, image_size=(118, 2167)):
     images = []
@@ -39,26 +54,21 @@ def load_data(data_dir, label_file, image_size=(118, 2167)):
     label_dict = {}
     with open(label_file, 'r', encoding='utf-8') as f:
         for line in f:
-            parts = line.strip().split('\t')  # Giả sử labels.txt có định dạng: filename.jpg<tab>nhãn
+            parts = line.strip().split('\t')
             if len(parts) == 2:
                 label_dict[parts[0]] = parts[1]
     
-    # Kiểm tra và chắc chắn image_size là (height, width)
-    print("Image size:", image_size)  # Debugging: In ra kích thước hình ảnh
+    print("Image size:", image_size)
     
-    # Lặp qua các file ảnh trong thư mục
     for filename in os.listdir(data_dir):
         if filename.endswith('.png') or filename.endswith('.jpg'):
             img_path = os.path.join(data_dir, filename)
             img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
             
             if img is not None:
-                # Thay đổi kích thước ảnh về (height, width)
-                img = cv2.resize(img, (image_size[1], image_size[0]))  # (width, height)
-                img = img.reshape((image_size[0], image_size[1], 1))  # (height, width, 1)
-                
-                # Lấy nhãn từ label_dict
-                label = label_dict.get(filename, filename.split('.')[0])  # Fallback nếu không tìm thấy nhãn
+                img = cv2.resize(img, (image_size[1], image_size[0]))
+                img = img.reshape((image_size[0], image_size[1], 1))
+                label = label_dict.get(filename, filename.split('.')[0])
                 images.append(img)
                 labels.append(label)
     

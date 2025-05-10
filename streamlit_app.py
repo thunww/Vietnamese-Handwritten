@@ -62,8 +62,7 @@ if uploaded_file:
     with open(image_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
 
-    st.image(image_path, caption="📷 Ảnh đã tải lên", use_column_width=True)
-
+    st.image(image_path, caption="📷 Ảnh đã tải lên", use_container_width=True)
     # Chọn phương pháp nhận dạng
     use_vietocr = st.checkbox("Sử dụng VietOCR (pretrained)", value=True)
 
