@@ -1,4 +1,3 @@
-# ocr_app.py
 import logging
 import json
 import os
@@ -117,7 +116,8 @@ class OCR:
             self.vietocr_predictor = load_vietocr_model(use_gpu=False)
             logger.info("Đã tải xong mô hình VietOCR")
         except Exception as e:
-            logger.warning(f"Không thể tải mô hình VietOCR: {str(e)}")
+            logger.error(f"Không thể tải mô hình VietOCR: {str(e)}")  # Đổi warning thành error
+            raise  # In chi tiết lỗi
         
         if custom_model_path:
             try:
