@@ -132,6 +132,7 @@ class OCR:
         if img is None:
             raise ValueError(f"Không thể xử lý ảnh từ {image_path}")
         return np.expand_dims(img, axis=0)
+
     def recognize(self, image_path, use_vietocr=True, preprocess=True):
         if not os.path.exists(image_path):
             raise FileNotFoundError(f"Không tìm thấy file ảnh tại {image_path}")
@@ -173,10 +174,10 @@ class OCR:
                 prediction.append(pred)
             
             return prediction[0]
-
+        
 def main():
     char_to_idx_path = "D:/Vietnamese-handwritten/data/char_to_idx_simplified.json"
-    custom_model_path = "D:/Vietnamese-handwritten/data/final_model.keras"
+    custom_model_path = "D:/Vietnamese-handwritten/data/new_model.keras"
     ocr = OCR(char_to_idx_path, custom_model_path=custom_model_path)
     image_path = input("Nhập đường dẫn đến file ảnh: ")
     use_vietocr = input("Sử dụng VietOCR? (y/n): ").lower() == 'y'

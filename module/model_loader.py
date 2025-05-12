@@ -1,6 +1,8 @@
+import cv2
 import tensorflow as tf
 import json
 import os
+import numpy as np 
 
 def load_data(data_dir, label_file, image_size=(118, 2167)):
     images = []
