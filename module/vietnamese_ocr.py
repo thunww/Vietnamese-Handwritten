@@ -5,7 +5,7 @@ from tensorflow.keras import backend as K
 
 def preprocess_image(image_path):
     img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
-    img = cv2.resize(img, (2167, 118))
+    img = cv2.resize(img, (512, 64))
     img = img / 255.0
     img = np.expand_dims(img, axis=-1)
     img = np.expand_dims(img, axis=0)

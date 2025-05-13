@@ -32,7 +32,7 @@ def load_custom_model(custom_model_path, num_classes):
     try:
         # Thay vì sử dụng build_model từ module.crnn_model, định nghĩa lại kiến trúc
         # để đảm bảo nó khớp chính xác với mô hình đã đào tạo
-        inputs = tf.keras.Input(shape=(118, 2167, 1))
+        inputs = tf.keras.Input(shape=(64, 512, 1))
         x = tf.keras.layers.Conv2D(64, (3, 3), padding='same', activation='relu')(inputs)
         x = tf.keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
         x = tf.keras.layers.Conv2D(128, (3, 3), padding='same', activation='relu')(x)
@@ -47,7 +47,8 @@ def load_custom_model(custom_model_path, num_classes):
         )(x)
         
         x = tf.keras.layers.Dense(num_classes, activation='softmax')(x)
-        model = tf.keras.Model(inputs, outputs=x)
+        model = tf.keras.Model(inputs=inputs, outputs=x)
+
         
         logger.info("Đã xây dựng mô hình với kiến trúc tương thích")
         
@@ -66,7 +67,7 @@ def load_custom_model(custom_model_path, num_classes):
             tf.compat.v1.reset_default_graph()
             
             # Tạo mô hình mới với cùng kích thước trọng số
-            inputs = tf.keras.Input(shape=(118, 2167, 1))
+            inputs = tf.keras.Input(shape=(64, 512, 1))
             x = tf.keras.layers.Conv2D(64, (3, 3), padding='same', activation='relu')(inputs)
             x = tf.keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
             x = tf.keras.layers.Conv2D(128, (3, 3), padding='same', activation='relu')(x)
@@ -82,7 +83,8 @@ def load_custom_model(custom_model_path, num_classes):
             )(x)
             
             x = tf.keras.layers.Dense(num_classes, activation='softmax')(x)
-            model = tf.keras.Model(inputs, outputs=x)
+            model = tf.keras.Model(inputs=inputs, outputs=x)
+
             
             # Thử tải bằng load_model thay vì load_weights
             if custom_model_path.endswith('.keras'):
@@ -127,7 +129,7 @@ class OCR:
             except Exception as e:
                 logger.warning(f"Không thể tải mô hình tự huấn luyện: {str(e)}")
 
-    def preprocess_for_crnn(self, image_path, target_size=(118, 2167)):
+    def preprocess_for_crnn(self, image_path, target_size=(64, 512)):
         img = preprocess_image(image_path, target_size)
         if img is None:
             raise ValueError(f"Không thể xử lý ảnh từ {image_path}")

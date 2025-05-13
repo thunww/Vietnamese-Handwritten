@@ -2,7 +2,7 @@ import tensorflow as tf
 
 def build_model(num_classes):
     # Explicitly name the input layer
-    inputs = tf.keras.Input(shape=(118, 2167, 1), name='input_layer')  # Added name='input_layer'
+    inputs = tf.keras.Input(shape=(64, 512, 1), name='input_layer')  # Added name='input_layer'
     
     # First Conv2D and Pooling
     x = tf.keras.layers.Conv2D(64, (3, 3), padding='same', activation='relu')(inputs)

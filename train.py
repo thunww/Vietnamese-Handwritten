@@ -52,7 +52,7 @@ def check_data_paths(data_dir, label_file):
         raise FileNotFoundError(f"File {label_file} không tồn tại.")
 
 # Xóa mô hình cũ để tránh xung đột
-for model_file in ['D:/Vietnamese-handwritten/data/final_model.keras', 'D:/Vietnamese-handwritten/data/best_model.keras']:
+for model_file in ['D:/Vietnamese-handwritten/data/new_model.keras', 'D:/Vietnamese-handwritten/data/best_model.keras']:
     if os.path.exists(model_file):
         os.remove(model_file)
         logger.info(f"Đã xóa mô hình cũ: {model_file}")
@@ -71,7 +71,7 @@ train_images, train_labels = load_data(train_data_dir, train_label_file)
 test_images, test_labels = load_data(test_data_dir, test_label_file)
 
 # Kiểm tra kích thước ảnh
-expected_shape = (118, 2167, 1)
+expected_shape = (64, 512, 1)
 if train_images.shape[1:] != expected_shape:
     raise ValueError(f"Kích thước train_images không khớp: {train_images.shape[1:]} != {expected_shape}")
 if test_images.shape[1:] != expected_shape:
@@ -204,7 +204,7 @@ training_model.fit(
     steps_per_epoch=(len(train_images) + batch_size - 1) // batch_size,
     validation_data=validation_generator,
     validation_steps=(len(test_images) + batch_size - 1) // batch_size,
-    epochs=20,
+    epochs=50,
     callbacks=callbacks,
     verbose=1
 )

@@ -22,7 +22,7 @@ except ImportError as e:
 
 # Paths configuration
 CHAR_DICT_PATH = "D:/Vietnamese-handwritten/data/char_to_idx_simplified.json"
-MODEL_PATH = "D:/Vietnamese-handwritten/data/new_model.keras"
+MODEL_PATH = "D:/Vietnamese-handwritten/data/best_model.keras"
 
 # Ensure paths exist
 if not os.path.exists(CHAR_DICT_PATH):

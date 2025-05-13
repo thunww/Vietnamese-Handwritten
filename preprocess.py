@@ -4,7 +4,7 @@ from PIL import Image, ImageOps
 import os
 
 
-def resize_and_pad(image, target_size=(32, 200)):
+def resize_and_pad(image, target_size=(64, 512)):
     """
     Resize ảnh giữ nguyên tỷ lệ, sau đó pad trắng cho đủ kích thước target.
     """
@@ -24,7 +24,7 @@ def resize_and_pad(image, target_size=(32, 200)):
     return canvas
 
 
-def preprocess_image(image_path, target_size=(32, 200)):
+def preprocess_image(image_path, target_size=(64, 512)):
     """
     Tiền xử lý ảnh OCR để sử dụng cho mô hình VietOCR.
     """
@@ -53,7 +53,7 @@ def preprocess_image(image_path, target_size=(32, 200)):
 
 
 
-def load_data(data_dir, label_file, image_size=(32, 200), threshold_method='simple'):
+def load_data(data_dir, label_file, image_size=(64, 512), threshold_method='simple'):
     """
     Load và xử lý ảnh từ thư mục và nhãn từ file.
     """
@@ -75,7 +75,7 @@ def load_data(data_dir, label_file, image_size=(32, 200), threshold_method='simp
             img_path = os.path.join(data_dir, filename)
             try:
                 pil_img = preprocess_image(img_path, image_size)
-                np_img = np.array(pil_img).reshape((image_size[0], image_size[1], 3))
+                np_img = np.array(pil_img).reshape((image_size[0], image_size[1], 1))
                 label = label_dict.get(filename, filename.split('.')[0])
                 images.append(np_img)
                 labels.append(label)
