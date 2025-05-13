@@ -1,12 +1,14 @@
-import tensorflow as tf
+import os
+import cv2
 
-# Kiểm tra số lượng GPU có sẵn
-print("Num GPUs Available: ", len(tf.config.experimental.list_physical_devices('GPU')))
-
-# Kiểm tra chi tiết về các GPU có sẵn
-gpus = tf.config.experimental.list_physical_devices('GPU')
-if gpus:
-    for gpu in gpus:
-        print(f"GPU: {gpu}")
-else:
-    print("No GPU found")
+train_data_dir = 'D:/Vietnamese-handwritten/data/train'
+image_sizes = []
+for filename in os.listdir(train_data_dir):
+    if filename.endswith('.jpg') or filename.endswith('.png'):
+        img_path = os.path.join(train_data_dir, filename)
+        img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+        if img is not None:
+            image_sizes.append(img.shape)  # (height, width)
+        else:
+            print(f"Không đọc được ảnh: {img_path}")
+print("Kích thước ảnh gốc:", set(image_sizes))

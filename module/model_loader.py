@@ -4,7 +4,7 @@ import json
 import os
 import numpy as np 
 
-def load_data(data_dir, label_file, image_size=(118, 2167)):
+def load_data(data_dir, label_file, image_size=(64, 512)):
     images = []
     labels = []
     
